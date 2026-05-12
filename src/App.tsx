@@ -87,15 +87,30 @@ export default function App() {
 
   const takePhoto = () => {
     if (videoRef.current) {
+      const vw = videoRef.current.videoWidth;
+      const vh = videoRef.current.videoHeight;
+      const maxDim = 1200;
+      let w = vw;
+      let h = vh;
+      if (w > maxDim || h > maxDim) {
+         if (w > h) {
+             h = Math.round((h * maxDim) / w);
+             w = maxDim;
+         } else {
+             w = Math.round((w * maxDim) / h);
+             h = maxDim;
+         }
+      }
+
       const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
+        ctx.drawImage(videoRef.current, 0, 0, w, h);
         canvas.toBlob((blob) => {
           if (blob) {
-            const file = new File([blob], `photo_${Date.now()}.png`, { type: 'image/png' });
+            const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
             const id = Math.random().toString(36).substring(7);
             const objectUrl = URL.createObjectURL(file);
             const img = new Image();
@@ -104,21 +119,21 @@ export default function App() {
                 id,
                 file,
                 preview: objectUrl,
-                width: img.naturalWidth,
-                height: img.naturalHeight,
+                width: w,
+                height: h,
                 boxes: [],
                 loadingBoxes: false,
               };
               setImages(prev => {
-                const newImages = [...prev, newImg];
-                setActiveImgIndex(newImages.length - 1);
-                return newImages;
+                const newLength = prev.length;
+                setTimeout(() => setActiveImgIndex(newLength), 0);
+                return [...prev, newImg];
               });
               analyzeImage(file, id);
             };
             img.src = objectUrl;
           }
-        }, 'image/png');
+        }, 'image/jpeg', 0.85);
       }
       stopCamera();
     }
@@ -144,9 +159,9 @@ export default function App() {
             loadingBoxes: false,
         };
         setImages(prev => {
-           const newImages = [...prev, newImg];
-           setActiveImgIndex(newImages.length - 1);
-           return newImages;
+           const newLength = prev.length;
+           setTimeout(() => setActiveImgIndex(newLength), 0);
+           return [...prev, newImg];
         });
         analyzeImage(file, id);
       };
