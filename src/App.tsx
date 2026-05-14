@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Type } from '@google/genai';
 import { UploadCloud, ListChecks, Download, Camera, ChevronLeft, ChevronRight, Image as ImageIcon, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -57,9 +56,6 @@ export default function App() {
 
   const updateActiveImageBoxes = (newBoxes: BoundingBox[]) => {
     setImages(prev => prev.map((img, i) => i === activeImgIndex ? { ...img, boxes: newBoxes } : img));
-  };
-  const setActiveImageLoading = (isLoading: boolean, imgId: string) => {
-    setImages(prev => prev.map(img => img.id === imgId ? { ...img, loadingBoxes: isLoading } : img));
   };
 
   const startCamera = async () => {
@@ -129,7 +125,6 @@ export default function App() {
                 setTimeout(() => setActiveImgIndex(newLength), 0);
                 return [...prev, newImg];
               });
-              analyzeImage(file, id);
             };
             img.src = objectUrl;
           }
@@ -163,80 +158,12 @@ export default function App() {
            setTimeout(() => setActiveImgIndex(newLength), 0);
            return [...prev, newImg];
         });
-        analyzeImage(file, id);
       };
       img.src = objectUrl;
     });
     
     // reset selection so input can fire again
     if (imgInputRef.current) imgInputRef.current.value = '';
-  };
-
-  // Call Gemini API to extract boxes
-  const analyzeImage = async (file: File, imgId: string) => {
-    setActiveImageLoading(true, imgId);
-    try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
-      
-      const ai = new GoogleGenAI({ apiKey });
-      
-      // Convert image to base64
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          const base64 = result.split(',')[1];
-          resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: [
-          {
-            inlineData: {
-              data: base64Data,
-              mimeType: file.type,
-            }
-          },
-          "You are a 'Visual Logistics Coordinator.' Your job is to bridge the gap between physical images and structured inventory data. Scan the image and list all detectable items. For each item, provide a bounding box. Output coordinates in this format: {\"label\": \"item_1\", \"box_2d\": [ymin, xmin, ymax, xmax]} where coordinates are scaled between 0 and 1000."
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                label: { type: Type.STRING },
-                box_2d: {
-                  type: Type.ARRAY,
-                  items: { type: Type.NUMBER },
-                }
-              },
-              required: ["label", "box_2d"]
-            }
-          }
-        }
-      });
-
-      if (response.text) {
-        const parsedBoxes = JSON.parse(response.text) as BoundingBox[];
-        const coloredBoxes = parsedBoxes.map((b, i) => ({
-          ...b,
-          color: COLORS[i % COLORS.length]
-        }));
-        setImages(prev => prev.map(img => img.id === imgId ? { ...img, boxes: coloredBoxes } : img));
-      }
-    } catch (err: any) {
-      console.error("Failed to analyze image", err);
-      alert("Error analyzing image: " + err.message);
-    } finally {
-      setActiveImageLoading(false, imgId);
-    }
   };
 
   const handleLinkItem = () => {
@@ -394,8 +321,8 @@ export default function App() {
         </div>
         <div className="hidden sm:flex gap-8 items-end">
           <div className="text-right">
-            <p className="text-[10px] text-[#666] uppercase tracking-wider">Detection Mode</p>
-            <p className="text-xl font-mono leading-none text-[#F27D26]">MULTI_MODAL</p>
+            <p className="text-[10px] text-[#666] uppercase tracking-wider">Annotation Mode</p>
+            <p className="text-xl font-mono leading-none text-[#F27D26]">MANUAL</p>
           </div>
         </div>
       </header>
@@ -560,15 +487,6 @@ export default function App() {
                     )}
                   </div>
                 </div>
-
-                {loadingBoxes && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-40">
-                    <div className="bg-[#111] border border-[#333] rounded-sm px-6 py-4 shadow-2xl flex flex-col items-center gap-3">
-                      <div className="w-6 h-6 border-[3px] border-[#F27D26] border-t-transparent rounded-full animate-spin" />
-                      <span className="text-[10px] font-mono tracking-widest uppercase text-[#F27D26]">Detecting items...</span>
-                    </div>
-                  </div>
-                )}
                 
                 {/* Canvas Overlays */}
                 <div className="absolute top-4 left-4 flex gap-2 pointer-events-none z-30 hidden sm:flex">
@@ -705,10 +623,10 @@ export default function App() {
             {rightTab === 'review' && (
               <section className="p-4 sm:p-5 text-white flex flex-col min-h-full">
                 <h2 className="text-xs font-black tracking-widest text-[#F27D26] uppercase mb-4 flex items-center gap-2">
-                  <ListChecks className="w-4 h-4" /> Detected Objects
+                  <ListChecks className="w-4 h-4" /> Marked Objects
                 </h2>
                 {boxes.length === 0 ? (
-                   <p className="text-[#666] text-sm text-center mt-10">No objects detected or added yet.</p>
+                   <p className="text-[#666] text-sm text-center mt-10">No objects marked yet.</p>
                 ) : (
                   <div className="space-y-2">
                     {boxes.map((box, idx) => (
