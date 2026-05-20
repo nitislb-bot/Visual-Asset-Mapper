@@ -58,6 +58,10 @@ export default function App() {
     setImages(prev => prev.map((img, i) => i === activeImgIndex ? { ...img, boxes: newBoxes } : img));
   };
 
+  const setActiveImageLoading = (isLoading: boolean, imgId: string) => {
+    setImages(prev => prev.map(img => img.id === imgId ? { ...img, loadingBoxes: isLoading } : img));
+  };
+
   const startCamera = async () => {
     setIsCameraActive(true);
     try {
@@ -125,6 +129,7 @@ export default function App() {
                 setTimeout(() => setActiveImgIndex(newLength), 0);
                 return [...prev, newImg];
               });
+              analyzeImage(file, id);
             };
             img.src = objectUrl;
           }
@@ -158,12 +163,61 @@ export default function App() {
            setTimeout(() => setActiveImgIndex(newLength), 0);
            return [...prev, newImg];
         });
+        analyzeImage(file, id);
       };
       img.src = objectUrl;
     });
     
     // reset selection so input can fire again
     if (imgInputRef.current) imgInputRef.current.value = '';
+  };
+
+  const analyzeImage = async (file: File, imgId: string) => {
+    setActiveImageLoading(true, imgId);
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const response = await fetch("/api/analyze-image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          base64Data,
+          mimeType: file.type,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.boxes) {
+        const coloredBoxes = (data.boxes as BoundingBox[]).map((b, i) => ({
+          ...b,
+          color: COLORS[i % COLORS.length]
+        }));
+        setImages(prev => prev.map(img => img.id === imgId ? { ...img, boxes: coloredBoxes } : img));
+      } else if (data.error) {
+        throw new Error(data.error);
+      }
+    } catch (err: any) {
+      console.error("Failed to analyze image", err);
+      let errMsg = err.message;
+      if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota")) {
+        errMsg = "You have exceeded your Gemini API quota. Please wait a bit before trying again.";
+      }
+      alert("Error analyzing image: " + errMsg);
+    } finally {
+      setActiveImageLoading(false, imgId);
+    }
   };
 
   const handleLinkItem = () => {
@@ -322,7 +376,7 @@ export default function App() {
         <div className="hidden sm:flex gap-8 items-end">
           <div className="text-right">
             <p className="text-[10px] text-[#666] uppercase tracking-wider">Annotation Mode</p>
-            <p className="text-xl font-mono leading-none text-[#F27D26]">MANUAL</p>
+            <p className="text-xl font-mono leading-none text-[#F27D26]">MULTI_MODAL</p>
           </div>
         </div>
       </header>
@@ -398,6 +452,15 @@ export default function App() {
                 >
                   <img src={activeImage.preview} alt="Workpiece" className="max-h-[60vh] object-contain block max-w-full pointer-events-none" draggable={false} />
                   
+                  {loadingBoxes && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-40">
+                      <div className="bg-[#111] border border-[#333] rounded-sm px-6 py-4 shadow-2xl flex flex-col items-center gap-3">
+                        <div className="w-6 h-6 border-[3px] border-[#F27D26] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-[10px] font-mono tracking-widest uppercase text-[#F27D26]">Detecting items...</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Bounding Boxes Layer */}
                   <div className="absolute inset-0 pointer-events-none overflow-hidden">
                     {showAnnotations && boxes.map((b, idx) => {
