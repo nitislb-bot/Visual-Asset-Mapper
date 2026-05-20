@@ -32,7 +32,7 @@ app.post("/api/analyze-image", async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3.5-flash",
       contents: [
         {
           inlineData: {
@@ -69,7 +69,8 @@ app.post("/api/analyze-image", async (req, res) => {
     }
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    res.status(500).json({ error: error.message });
+    const status = error.status || (error.message?.includes("429") ? 429 : 500);
+    res.status(status).json({ error: error.message });
   }
 });
 

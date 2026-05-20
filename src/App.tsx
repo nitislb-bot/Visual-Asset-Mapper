@@ -199,20 +199,24 @@ export default function App() {
 
       const data = await response.json();
 
-      if (data.boxes) {
+      if (response.ok && data.boxes) {
         const coloredBoxes = (data.boxes as BoundingBox[]).map((b, i) => ({
           ...b,
           color: COLORS[i % COLORS.length]
         }));
         setImages(prev => prev.map(img => img.id === imgId ? { ...img, boxes: coloredBoxes } : img));
-      } else if (data.error) {
-        throw new Error(data.error);
+      } else {
+        const errorMsg = data.error || "Unknown error occurred";
+        if (response.status === 429 || errorMsg.includes("429") || errorMsg.includes("RESOURCE_EXHAUSTED")) {
+          throw new Error("QUOTA_EXCEEDED");
+        }
+        throw new Error(errorMsg);
       }
     } catch (err: any) {
       console.error("Failed to analyze image", err);
       let errMsg = err.message;
-      if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota")) {
-        errMsg = "You have exceeded your Gemini API quota. Please wait a bit before trying again.";
+      if (errMsg === "QUOTA_EXCEEDED") {
+        errMsg = "You have exceeded your Gemini API quota. This usually resets quickly on the free tier. Please wait a minute and try again.";
       }
       alert("Error analyzing image: " + errMsg);
     } finally {
